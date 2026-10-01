@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M-Banking Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-800 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-gray-100 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border-4 border-gray-700 min-h-[650px] flex flex-col justify-between">
+    <div class="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md">
+      <h1 class="font-bold text-lg">MyBank Mobile</h1>
+      <span id="logoutBtn" class="text-xs bg-blue-700 px-2 py-1 rounded cursor-pointer hidden" onclick="logout()">Logout</span>
+    </div>
+    <div class="p-4 flex-1 overflow-y-auto">
+      <div id="loginView" class="space-y-4 pt-8">
+        <h2 class="text-xl font-bold text-gray-800 text-center">Selamat Datang</h2>
+        <div class="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 space-y-1">
+          <p class="font-bold">Akun Test:</p>
+          <p>• Rek: 1234567890 | PIN: 123456</p>
+          <p>• Rek: 0987654321 | PIN: 654321</p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold">No Rekening</label>
+          <input type="text" id="loginAcc" placeholder="1234567890" class="w-full p-2 border rounded text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-semibold">PIN</label>
+          <input type="password" id="loginPin" maxlength="6" placeholder="123456" class="w-full p-2 border rounded text-sm mt-1">
+        </div>
+        <button onclick="handleLogin()" class="w-full bg-blue-600 text-white font-bold py-2 rounded text-sm">Masuk</button>
+      </div>
+      <div id="dashboardView" class="space-y-4 hidden">
+        <div class="bg-blue-600 text-white p-4 rounded-xl shadow">
+          <p class="text-xs opacity-80">Tabungan Utama</p>
+          <h3 id="userName" class="font-bold text-sm mt-1">-</h3>
+          <p id="userAccNumber" class="text-xs opacity-75">No. Rek: -</p>
+          <div class="mt-4">
+            <p class="text-xs opacity-80">Saldo Aktif</p>
+            <h2 id="userBalance" class="text-2xl font-bold">Rp 0</h2>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="showTransferModal()" class="bg-white p-3 rounded-xl border text-xs font-semibold shadow-sm">➔ Transfer</button>
+          <button onclick="updateDashboard()" class="bg-white p-3 rounded-xl border text-xs font-semibold shadow-sm">📋 Refresh Mutasi</button>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-gray-600 mb-2">Riwayat Transaksi</h4>
+          <div id="txList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="transferModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-xs rounded-xl p-4 space-y-3">
+      <h3 class="font-bold text-sm">Transfer Dana</h3>
+      <input type="text" id="tfReceiver" placeholder="No Rek Tujuan" class="w-full p-2 border rounded text-xs">
+      <input type="number" id="tfAmount" placeholder="Nominal Rp" class="w-full p-2 border rounded text-xs">
+      <input type="text" id="tfNote" placeholder="Catatan" class="w-full p-2 border rounded text-xs">
+      <input type="password" id="tfPin" maxlength="6" placeholder="PIN Anda" class="w-full p-2 border rounded text-xs">
+      <div class="flex gap-2">
+        <button onclick="closeTransferModal()" class="w-1/2 bg-gray-300 py-1.5 rounded text-xs">Batal</button>
+        <button onclick="handleTransfer()" class="w-1/2 bg-blue-600 text-white py-1.5 rounded text-xs">Kirim</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    let currentAccount = null;
+    async function handleLogin() {
+      const accountNumber = document.getElementById('loginAcc').value;
+      const pin = document.getElementById('loginPin').value;
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountNumber, pin }) });
+      const data = await res.json();
+      if (data.success) {
+        currentAccount = data.accountNumber;
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('dashboardView').classList.remove('hidden');
+        document.getElementById('logoutBtn').classList.remove('hidden');
+        updateDashboard();
+      } else { alert(data.message); }
+    }
+    async function updateDashboard() {
+      if (!currentAccount) return;
+      const res = await fetch(`/api/account/${currentAccount}`);
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('userName').innerText = data.name;
+        document.getElementById('userAccNumber').innerText = `No. Rek: ${currentAccount}`;
+        document.getElementById('userBalance').innerText = `Rp ${data.balance.toLocaleString('id-ID')}`;
+        const txList = document.getElementById('txList');
+        txList.innerHTML = '';
+        data.transactions.forEach(tx => {
+          const isKredit = tx.type === 'Kredit';
+          const item = document.createElement('div');
+          item.className = 'bg-white p-2 rounded border flex justify-between items-center text-xs';
+          item.innerHTML = `<div><p class="font-bold">${tx.note}</p><p class="text-[10px] text-gray-400">${tx.date}</p></div><span class="font-bold ${isKredit ? 'text-green-600' : 'text-red-600'}">${isKredit ? '+' : '-'} Rp ${tx.amount.toLocaleString('id-ID')}</span>`;
+          txList.appendChild(item);
+        });
+      }
+    }
+    function showTransferModal() { document.getElementById('transferModal').classList.remove('hidden'); }
+    function closeTransferModal() { document.getElementById('transferModal').classList.add('hidden'); }
+    async function handleTransfer() {
+      const receiverAcc = document.getElementById('tfReceiver').value;
+      const amount = document.getElementById('tfAmount').value;
+      const note = document.getElementById('tfNote').value;
+      const pin = document.getElementById('tfPin').value;
+      const res = await fetch('/api/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ senderAcc: currentAccount, receiverAcc, amount, pin, note }) });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) { closeTransferModal(); updateDashboard(); }
+    }
+    function logout() { location.reload(); }
+  </script>
+</body>
+</html>
